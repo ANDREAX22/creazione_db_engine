@@ -30,3 +30,35 @@ a.next {
 a.next:after {
   content: " >"
 }
+
+// Mobile optimizations to prevent zoom issues
+html {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+// Allow text selection for content areas
+section {
+  -webkit-user-select: text;
+  -khtml-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+// Ensure minimum touch target size
+a, button, input, select, textarea {
+  min-height: 44px;
+  min-width: 44px;
+}
