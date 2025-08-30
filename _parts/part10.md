@@ -1,19 +1,19 @@
 ---
-title: Part 10 - Splitting a Leaf Node
+title: Parte 10 - Divisione di un Nodo Foglia
 date: 2017-10-09
 ---
 
-Our B-Tree doesn't feel like much of a tree with only one node. To fix that, we need some code to split a leaf node in twain. And after that, we need to create an internal node to serve as a parent for the two leaf nodes.
+Il nostro B-Tree non sembra molto un albero con solo un nodo. Per risolvere questo, abbiamo bisogno di codice per dividere un nodo foglia in due. E dopo quello, dobbiamo creare un nodo interno per servire come genitore per i due nodi foglia.
 
-Basically our goal for this article is to go from this:
+Fondamentalmente il nostro obiettivo per questo articolo è passare da questo:
 
-{% include image.html url="assets/images/btree2.png" description="one-node btree" %}
+{% include image.html url="assets/images/btree2.png" description="btree a un nodo" %}
 
-to this:
+a questo:
 
-{% include image.html url="assets/images/btree3.png" description="two-level btree" %}
+{% include image.html url="assets/images/btree3.png" description="btree a due livelli" %}
 
-First things first, let's remove the error handling for a full leaf node:
+Prima di tutto, rimuoviamo la gestione degli errori per un nodo foglia pieno:
 
 ```diff
  void leaf_node_insert(Cursor* cursor, uint32_t key, Row* value) {
@@ -21,7 +21,7 @@ First things first, let's remove the error handling for a full leaf node:
  
    uint32_t num_cells = *leaf_node_num_cells(node);
    if (num_cells >= LEAF_NODE_MAX_CELLS) {
-     // Node full
+     // Nodo pieno
 -    printf("Need to implement splitting a leaf node.\n");
 -    exit(EXIT_FAILURE);
 +    leaf_node_split_and_insert(cursor, key, value);
@@ -41,21 +41,20 @@ ExecuteResult execute_insert(Statement* statement, Table* table) {
    uint32_t key_to_insert = row_to_insert->id;
 ```
 
-## Splitting Algorithm
+## Algoritmo di Divisione
 
-Easy part's over. Here's a description of what we need to do from [SQLite Database System: Design and Implementation](https://play.google.com/store/books/details/Sibsankar_Haldar_SQLite_Database_System_Design_and?id=9Z6IQQnX1JEC&hl=en)
+La parte facile è finita. Ecco una descrizione di quello che dobbiamo fare da [SQLite Database System: Design and Implementation](https://play.google.com/store/books/details/Sibsankar_Haldar_SQLite_Database_System_Design_and?id=9Z6IQQnX1JEC&hl=en)
 
-> If there is no space on the leaf node, we would split the existing entries residing there and the new one (being inserted) into two equal halves: lower and upper halves. (Keys on the upper half are strictly greater than those on the lower half.) We allocate a new leaf node, and move the upper half into the new node.
+> Se non c'è spazio nel nodo foglia, divideremmo le entry esistenti che risiedono lì e quella nuova (che viene inserita) in due metà uguali: metà inferiore e superiore. (Le chiavi nella metà superiore sono strettamente maggiori di quelle nella metà inferiore.) Allochiamo un nuovo nodo foglia, e spostiamo la metà superiore nel nuovo nodo.
 
-
-Let's get a handle to the old node and create the new node:
+Otteniamo un handle al nodo vecchio e creiamo il nuovo nodo:
 
 ```diff
 +void leaf_node_split_and_insert(Cursor* cursor, uint32_t key, Row* value) {
 +  /*
-+  Create a new node and move half the cells over.
-+  Insert the new value in one of the two nodes.
-+  Update parent or create a new parent.
++  Crea un nuovo nodo e sposta metà delle celle.
++  Inserisce il nuovo valore in uno dei due nodi.
++  Aggiorna il genitore o crea un nuovo genitore.
 +  */
 +
 +  void* old_node = get_page(cursor->table->pager, cursor->page_num);
@@ -64,13 +63,13 @@ Let's get a handle to the old node and create the new node:
 +  initialize_leaf_node(new_node);
 ```
 
-Next, copy every cell into its new location:
+Poi, copia ogni cella nella sua nuova posizione:
 
 ```diff
 +  /*
-+  All existing keys plus new key should be divided
-+  evenly between old (left) and new (right) nodes.
-+  Starting from the right, move each key to correct position.
++  Tutte le chiavi esistenti più la nuova chiave dovrebbero essere divise
++  uniformemente tra il nodo vecchio (sinistro) e nuovo (destro).
++  Partendo da destra, sposta ogni chiave nella posizione corretta.
 +  */
 +  for (int32_t i = LEAF_NODE_MAX_CELLS; i >= 0; i--) {
 +    void* destination_node;
@@ -92,15 +91,15 @@ Next, copy every cell into its new location:
 +  }
 ```
 
-Update cell counts in each node's header:
+Aggiorna i conteggi delle celle nell'header di ogni nodo:
 
 ```diff
-+  /* Update cell count on both leaf nodes */
++  /* Aggiorna il conteggio delle celle su entrambi i nodi foglia */
 +  *(leaf_node_num_cells(old_node)) = LEAF_NODE_LEFT_SPLIT_COUNT;
 +  *(leaf_node_num_cells(new_node)) = LEAF_NODE_RIGHT_SPLIT_COUNT;
 ```
 
-Then we need to update the nodes' parent. If the original node was the root, it had no parent. In that case, create a new root node to act as the parent. I'll stub out the other branch for now:
+Poi dobbiamo aggiornare il genitore dei nodi. Se il nodo originale era la radice, non avesse genitore. In quel caso, creiamo un nuovo nodo radice per agire come genitore. Stubberò l'altra branca per ora:
 
 ```diff
 +  if (is_node_root(old_node)) {
@@ -109,26 +108,26 @@ Then we need to update the nodes' parent. If the original node was the root, it 
 +    printf("Need to implement updating parent after split\n");
 +    exit(EXIT_FAILURE);
 +  }
-+}
+}
 ```
 
-## Allocating New Pages
+## Allocazione di Nuove Pagine
 
-Let's go back and define a few new functions and constants. When we created a new leaf node, we put it in a page decided by `get_unused_page_num()`:
+Torniamo indietro e definiamo alcune nuove funzioni e costanti. Quando abbiamo creato un nuovo nodo foglia, l'abbiamo messo in una pagina decisa da `get_unused_page_num()`:
 
 ```diff
 +/*
-+Until we start recycling free pages, new pages will always
-+go onto the end of the database file
++Finché non iniziamo a riciclare le pagine libere, le nuove pagine
++sempre andranno alla fine del file del database
 +*/
 +uint32_t get_unused_page_num(Pager* pager) { return pager->num_pages; }
 ```
 
-For now, we're assuming that in a database with N pages, page numbers 0 through N-1 are allocated. Therefore we can always allocate page number N for new pages. Eventually after we implement deletion, some pages may become empty and their page numbers unused. To be more efficient, we could re-allocate those free pages.
+Per ora, assumiamo che in un database con N pagine, i numeri di pagina 0 a N-1 siano allocati. Quindi possiamo sempre allocare il numero di pagina N per le nuove pagine. Eventualmente dopo aver implementato la cancellazione, alcune pagine potrebbero diventare vuote e i loro numeri di pagina non utilizzati. Per essere più efficiente, potremmo riallocare quelle pagine libere.
 
-## Leaf Node Sizes
+## Dimensioni del Nodo Foglia
 
-To keep the tree balanced, we evenly distribute cells between the two new nodes. If a leaf node can hold N cells, then during a split we need to distribute N+1 cells between two nodes (N original cells plus one new one). I'm arbitrarily choosing the left node to get one more cell if N+1 is odd.
+Per mantenere l'albero bilanciato, distribuiremo uniformemente le celle tra i due nuovi nodi. Se un nodo foglia può contenere N celle, allora durante una divisione dobbiamo distribuire N+1 celle tra due nodi (N celle originali più una nuova). Sceglierò arbitrariamente il nodo sinistro per ottenere un'altra cella se N+1 è dispari.
 
 ```diff
 +const uint32_t LEAF_NODE_RIGHT_SPLIT_COUNT = (LEAF_NODE_MAX_CELLS + 1) / 2;
@@ -136,22 +135,22 @@ To keep the tree balanced, we evenly distribute cells between the two new nodes.
 +    (LEAF_NODE_MAX_CELLS + 1) - LEAF_NODE_RIGHT_SPLIT_COUNT;
 ```
 
-## Creating a New Root
+## Creazione di una Nuova Radice
 
-Here's how [SQLite Database System](https://play.google.com/store/books/details/Sibsankar_Haldar_SQLite_Database_System_Design_and?id=9Z6IQQnX1JEC&hl=en) explains the process of creating a new root node:
+Ecco come [SQLite Database System](https://play.google.com/store/books/details/Sibsankar_Haldar_SQLite_Database_System_Design_and?id=9Z6IQQnX1JEC&hl=en) spiega il processo di creazione di un nuovo nodo radice:
 
-> Let N be the root node. First allocate two nodes, say L and R. Move lower half of N into L and the upper half into R. Now N is empty. Add 〈L, K,R〉 in N, where K is the max key in L. Page N remains the root. Note that the depth of the tree has increased by one, but the new tree remains height balanced without violating any B+-tree property.
+> Sia N il nodo radice. Prima di tutto, allochiamo due nodi, diciamo L e R. Spostiamo la metà inferiore di N in L e la metà superiore in R. Ora N è vuoto. Aggiungiamo 〈L, K,R〉 in N, dove K è la chiave massima in L. La pagina N rimane la radice. Nota che la profondità dell'albero è aumentata di uno, ma il nuovo albero rimane bilanciato senza violare alcuna proprietà di B+-tree.
 
-At this point, we've already allocated the right child and moved the upper half into it. Our function takes the right child as input and allocates a new page to store the left child.
+A questo punto, abbiamo già allocato il nodo figlio destro e abbiamo spostato la metà superiore in esso. La nostra funzione prende il nodo figlio destro come input e alloca una nuova pagina per memorizzare il nodo figlio sinistro.
 
 ```diff
 +void create_new_root(Table* table, uint32_t right_child_page_num) {
 +  /*
-+  Handle splitting the root.
-+  Old root copied to new page, becomes left child.
-+  Address of right child passed in.
-+  Re-initialize root page to contain the new root node.
-+  New root node points to two children.
++  Gestisce la divisione della radice.
++  L'antico root copiato nella nuova pagina, diventa il figlio sinistro.
++  L'indirizzo del figlio destro passato come input.
++  Re-inizializza la pagina root per contenere il nuovo nodo radice.
++  Il nuovo nodo radice punta a due figli.
 +  */
 +
 +  void* root = get_page(table->pager, table->root_page_num);
@@ -160,18 +159,18 @@ At this point, we've already allocated the right child and moved the upper half 
 +  void* left_child = get_page(table->pager, left_child_page_num);
 ```
 
-The old root is copied to the left child so we can reuse the root page:
+L'antico root viene copiato nel figlio sinistro in modo da poterlo riutilizzare:
 
 ```diff
-+  /* Left child has data copied from old root */
++  /* Il figlio sinistro ha i dati copiati dall'antico root */
 +  memcpy(left_child, root, PAGE_SIZE);
 +  set_node_root(left_child, false);
 ```
 
-Finally we initialize the root page as a new internal node with two children.
+Infine, inizializziamo la pagina root come un nuovo nodo interno con due figli.
 
 ```diff
-+  /* Root node is a new internal node with one key and two children */
++  /* Il nodo radice è un nuovo nodo interno con una chiave e due figli */
 +  initialize_internal_node(root);
 +  set_node_root(root, true);
 +  *internal_node_num_keys(root) = 1;
@@ -182,13 +181,13 @@ Finally we initialize the root page as a new internal node with two children.
 +}
 ```
 
-## Internal Node Format
+## Formato del Nodo Interno
 
-Now that we're finally creating an internal node, we have to define its layout. It starts with the common header, then the number of keys it contains, then the page number of its rightmost child. Internal nodes always have one more child pointer than they have keys. That extra child pointer is stored in the header.
+Ora che finalmente stiamo creando un nodo interno, dobbiamo definire il suo layout. Inizia con l'header comune, poi il numero di chiavi che contiene, poi il numero di pagina del suo figlio più a destra. I nodi interni hanno sempre un puntatore figlio in più rispetto al numero di chiavi. Questo puntatore extra è memorizzato nell'header.
 
 ```diff
 +/*
-+ * Internal Node Header Layout
++ * Header del Nodo Interno Layout
 + */
 +const uint32_t INTERNAL_NODE_NUM_KEYS_SIZE = sizeof(uint32_t);
 +const uint32_t INTERNAL_NODE_NUM_KEYS_OFFSET = COMMON_NODE_HEADER_SIZE;
@@ -200,11 +199,11 @@ Now that we're finally creating an internal node, we have to define its layout. 
 +                                           INTERNAL_NODE_RIGHT_CHILD_SIZE;
 ```
 
-The body is an array of cells where each cell contains a child pointer and a key. Every key should be the maximum key contained in the child to its left.
+Il corpo è un array di celle dove ogni cella contiene un puntatore figlio e una chiave. Ogni chiave dovrebbe essere la chiave massima contenuta nel figlio a sinistra.
 
 ```diff
 +/*
-+ * Internal Node Body Layout
++ * Corpo del Nodo Interno Layout
 + */
 +const uint32_t INTERNAL_NODE_KEY_SIZE = sizeof(uint32_t);
 +const uint32_t INTERNAL_NODE_CHILD_SIZE = sizeof(uint32_t);
@@ -212,22 +211,22 @@ The body is an array of cells where each cell contains a child pointer and a key
 +    INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
 ```
 
-Based on these constants, here's how the layout of an internal node will look:
+In base a queste costanti, ecco come apparirà il layout di un nodo interno:
 
-{% include image.html url="assets/images/internal-node-format.png" description="Our internal node format" %}
+{% include image.html url="assets/images/internal-node-format.png" description="Il nostro formato interno" %}
 
-Notice our huge branching factor. Because each child pointer / key pair is so small, we can fit 510 keys and 511 child pointers in each internal node. That means we'll never have to traverse many layers of the tree to find a given key!
+Notiamo il nostro enorme fattore di branching. Poiché ogni coppia di puntatore figlio / chiave è così piccola, possiamo adattare 510 chiavi e 511 puntatori figlio in ogni nodo interno. Ciò significa che non dovremo mai navigare molte strati dell'albero per trovare una chiave data!
 
-| # internal node layers | max # leaf nodes    | Size of all leaf nodes |
-|------------------------|---------------------|------------------------|
-| 0                      | 511^0 = 1           | 4 KB                   |
-| 1                      | 511^1 = 512         | ~2 MB                   |
-| 2                      | 511^2 = 261,121     | ~1 GB                   |
-| 3                      | 511^3 = 133,432,831 | ~550 GB                 |
+| # livelli interni dell'albero | max # nodi foglia    | Dimensione di tutti i nodi foglia |
+|------------------------------|---------------------|------------------------|
+| 0                            | 511^0 = 1           | 4 KB                   |
+| 1                            | 511^1 = 512         | ~2 MB                   |
+| 2                            | 511^2 = 261,121     | ~1 GB                   |
+| 3                            | 511^3 = 133,432,831 | ~550 GB                 |
 
-In actuality, we can't store a full 4 KB of data per leaf node due to the overhead of the header, keys, and wasted space. But we can search through something like 500 GB of data by loading only 4 pages from disk. This is why the B-Tree is a useful data structure for databases.
+In realtà, non possiamo memorizzare un intero 4 KB di dati per nodo foglia a causa dell'overhead del header, delle chiavi e dello spazio perso. Ma possiamo cercare attraverso qualcosa come 500 GB di dati caricando solo 4 pagine dal disco. Questo è il motivo per cui l'albero B è una struttura di dati utile per i database.
 
-Here are the methods for reading and writing to an internal node:
+Ecco i metodi per leggere e scrivere su un nodo interno:
 
 ```diff
 +uint32_t* internal_node_num_keys(void* node) {
@@ -259,7 +258,7 @@ Here are the methods for reading and writing to an internal node:
 +}
 ```
 
-For an internal node, the maximum key is always its right key. For a leaf node, it's the key at the maximum index:
+Per un nodo interno, la chiave massima è sempre la sua chiave più a destra. Per un nodo foglia, è la chiave all'indice massimo:
 
 ```diff
 +uint32_t get_node_max_key(void* node) {
@@ -272,9 +271,9 @@ For an internal node, the maximum key is always its right key. For a leaf node, 
 +}
 ```
 
-## Keeping Track of the Root
+## Tenere traccia della Radice
 
-We're finally using the `is_root` field in the common node header. Recall that we use it to decide how to split a leaf node:
+Stiamo finalmente usando il campo `is_root` nell'header comune del nodo. Ricordiamo che lo usiamo per decidere come dividere un nodo foglia:
 
 ```c
   if (is_node_root(old_node)) {
@@ -286,7 +285,7 @@ We're finally using the `is_root` field in the common node header. Recall that w
 }
 ```
 
-Here are the getter and setter:
+Ecco i getter e setter:
 
 ```diff
 +bool is_node_root(void* node) {
@@ -301,7 +300,7 @@ Here are the getter and setter:
 ```
 
 
-Initializing both types of nodes should default to setting `is_root` to false:
+L'inizializzazione di entrambi i tipi di nodi dovrebbe impostare `is_root` a false per default:
 
 ```diff
  void initialize_leaf_node(void* node) {
@@ -317,10 +316,10 @@ Initializing both types of nodes should default to setting `is_root` to false:
 +}
 ```
 
-We should set `is_root` to true when creating the first node of the table:
+Dobbiamo impostare `is_root` a true quando creiamo il primo nodo della tabella:
 
 ```diff
-     // New database file. Initialize page 0 as leaf node.
+     // Nuovo file del database. Inizializza la pagina 0 come nodo foglia.
      void* root_node = get_page(pager, 0);
      initialize_leaf_node(root_node);
 +    set_node_root(root_node, true);
@@ -329,11 +328,11 @@ We should set `is_root` to true when creating the first node of the table:
    return table;
 ```
 
-## Printing the Tree
+## Stampa dell'Albero
 
-To help us visualize the state of the database, we should update our `.btree` metacommand to print a multi-level tree.
+Per aiutarci a visualizzare lo stato del database, dovremmo aggiornare il nostro comando `.btree` per stampare un albero multi-livello.
 
-I'm going to replace the current `print_leaf_node()` function
+Sostituirò la funzione `print_leaf_node()` corrente
 
 ```diff
 -void print_leaf_node(void* node) {
@@ -346,7 +345,7 @@ I'm going to replace the current `print_leaf_node()` function
 -}
 ```
 
-with a new recursive function that takes any node, then prints it and its children. It takes an indentation level as a parameter, which increases with each recursive call. I'm also adding a tiny helper function to indent.
+con una nuova funzione ricorsiva che prende qualsiasi nodo, poi lo stampa e i suoi figli. Prende un livello di indentazione come parametro, che aumenta con ogni chiamata ricorsiva. Aggiungo anche una funzione di aiuto per l'indentazione.
 
 ```diff
 +void indent(uint32_t level) {
@@ -376,7 +375,7 @@ with a new recursive function that takes any node, then prints it and its childr
 +      for (uint32_t i = 0; i < num_keys; i++) {
 +        child = *internal_node_child(node, i);
 +        print_tree(pager, child, indentation_level + 1);
-+
+
 +        indent(indentation_level + 1);
 +        printf("- key %d\n", *internal_node_key(node, i));
 +      }
@@ -387,7 +386,7 @@ with a new recursive function that takes any node, then prints it and its childr
 +}
 ```
 
-And update the call to the print function, passing an indentation level of zero.
+E aggiorniamo la chiamata alla funzione di stampa, passando un livello di indentazione di zero.
 
 ```diff
    } else if (strcmp(input_buffer->buffer, ".btree") == 0) {
@@ -397,44 +396,44 @@ And update the call to the print function, passing an indentation level of zero.
      return META_COMMAND_SUCCESS;
 ```
 
-Here's a test case for the new printing functionality!
+Ecco un test case per la nuova funzionalità di stampa!
 
 ```diff
-+  it 'allows printing out the structure of a 3-leaf-node btree' do
-+    script = (1..14).map do |i|
-+      "insert #{i} user#{i} person#{i}@example.com"
-+    end
-+    script << ".btree"
-+    script << "insert 15 user15 person15@example.com"
-+    script << ".exit"
-+    result = run_script(script)
-+
-+    expect(result[14...(result.length)]).to match_array([
-+      "db > Tree:",
-+      "- internal (size 1)",
-+      "  - leaf (size 7)",
-+      "    - 1",
-+      "    - 2",
-+      "    - 3",
-+      "    - 4",
-+      "    - 5",
-+      "    - 6",
-+      "    - 7",
-+      "  - key 7",
-+      "  - leaf (size 7)",
-+      "    - 8",
-+      "    - 9",
-+      "    - 10",
-+      "    - 11",
-+      "    - 12",
-+      "    - 13",
-+      "    - 14",
-+      "db > Need to implement searching an internal node",
-+    ])
-+  end
+  it 'allows printing out the structure of a 3-leaf-node btree' do
+    script = (1..14).map do |i|
+      "insert #{i} user#{i} person#{i}@example.com"
+    end
+    script << ".btree"
+    script << "insert 15 user15 person15@example.com"
+    script << ".exit"
+    result = run_script(script)
+
+    expect(result[14...(result.length)]).to match_array([
+      "db > Tree:",
+      "- internal (size 1)",
+      "  - leaf (size 7)",
+      "    - 1",
+      "    - 2",
+      "    - 3",
+      "    - 4",
+      "    - 5",
+      "    - 6",
+      "    - 7",
+      "  - key 7",
+      "  - leaf (size 7)",
+      "    - 8",
+      "    - 9",
+      "    - 10",
+      "    - 11",
+      "    - 12",
+      "    - 13",
+      "    - 14",
+      "db > Need to implement searching an internal node",
+    ])
+  end
 ```
 
-The new format is a little simplified, so we need to update the existing `.btree` test:
+Il nuovo formato è un po' semplificato, quindi dobbiamo aggiornare il test `.btree` esistente:
 
 ```diff
        "db > Executed.",
@@ -453,7 +452,7 @@ The new format is a little simplified, so we need to update the existing `.btree
    end
 ```
 
-Here's the `.btree` output of the new test on its own:
+Ecco l'output di `.btree` del nuovo test da solo:
 
 ```
 Tree:
@@ -477,17 +476,17 @@ Tree:
     - 14
 ```
 
-On the least indented level, we see the root node (an internal node). It says `size 1` because it has one key. Indented one level, we see a leaf node, a key, and another leaf node. The key in the root node (7) is is the maximum key in the first leaf node. Every key greater than 7 is in the second leaf node.
+Al livello meno indentato, vediamo il nodo radice (un nodo interno). Dice `size 1` perché ha una chiave. Indentato di un livello, vediamo un nodo foglia, una chiave e un altro nodo foglia. La chiave nel nodo radice (7) è la chiave massima nel primo nodo foglia. Ogni chiave maggiore di 7 si trova nel secondo nodo foglia.
 
-## A Major Problem
+## Un Problema Grande
 
-If you've been following along closely you may notice we've missed something big. Look what happens if we try to insert one additional row:
+Se sei stato attento, potresti aver notato che abbiamo perso qualcosa di grande. Guarda cosa succede se proviamo a inserire un'altra riga:
 
 ```
 db > insert 15 user15 person15@example.com
 Need to implement searching an internal node
 ```
 
-Whoops! Who wrote that TODO message? :P
+Whoops! Chi ha scritto quel TODO? :P
 
-Next time we'll continue the epic B-tree saga by implementing search on a multi-level tree.
+La prossima volta continuerò la grande saga dell'albero B, implementando la ricerca su un albero multi-livello.

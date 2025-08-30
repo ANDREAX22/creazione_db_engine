@@ -1,19 +1,19 @@
 ---
-title: Part 2 - World's Simplest SQL Compiler and Virtual Machine
+title: Parte 2 - Il Compilatore SQL e la Macchina Virtuale Più Semplici del Mondo
 date: 2017-08-31
 ---
 
-We're making a clone of sqlite. The "front-end" of sqlite is a SQL compiler that parses a string and outputs an internal representation called bytecode.
+Stiamo facendo un clone di sqlite. Il "front-end" di sqlite è un compilatore SQL che analizza una stringa e produce una rappresentazione interna chiamata bytecode.
 
-This bytecode is passed to the virtual machine, which executes it.
+Questo bytecode viene passato alla macchina virtuale, che lo esegue.
 
-{% include image.html url="assets/images/arch2.gif" description="SQLite Architecture (https://www.sqlite.org/arch.html)" %}
+{% include image.html url="assets/images/arch2.gif" description="Architettura SQLite (https://www.sqlite.org/arch.html)" %}
 
-Breaking things into two steps like this has a couple advantages:
-- Reduces the complexity of each part (e.g. virtual machine does not worry about syntax errors)
-- Allows compiling common queries once and caching the bytecode for improved performance
+Dividere le cose in due passaggi come questo ha alcuni vantaggi:
+- Riduce la complessità di ogni parte (es. la macchina virtuale non si preoccupa degli errori di sintassi)
+- Permette di compilare query comuni una volta e memorizzare nella cache il bytecode per migliorare le prestazioni
 
-With this in mind, let's refactor our `main` function and support two new keywords in the process:
+Con questo in mente, rifattorizziamo la nostra funzione `main` e supportiamo due nuove parole chiave nel processo:
 
 ```diff
  int main(int argc, char* argv[]) {
@@ -52,13 +52,13 @@ With this in mind, let's refactor our `main` function and support two new keywor
  }
 ```
 
-Non-SQL statements like `.exit` are called "meta-commands". They all start with a dot, so we check for them and handle them in a separate function.
+Le istruzioni non-SQL come `.exit` sono chiamate "meta-comandi". Iniziano tutte con un punto, quindi le controlliamo e le gestiamo in una funzione separata.
 
-Next, we add a step that converts the line of input into our internal representation of a statement. This is our hacky version of the sqlite front-end.
+Poi, aggiungiamo un passaggio che converte la riga di input nella nostra rappresentazione interna di un'istruzione. Questa è la nostra versione approssimativa del front-end di sqlite.
 
-Lastly, we pass the prepared statement to `execute_statement`. This function will eventually become our virtual machine.
+Infine, passiamo l'istruzione preparata a `execute_statement`. Questa funzione diventerà alla fine la nostra macchina virtuale.
 
-Notice that two of our new functions return enums indicating success or failure:
+Nota che due delle nostre nuove funzioni restituiscono enum che indicano successo o fallimento:
 
 ```c
 typedef enum {
@@ -69,9 +69,9 @@ typedef enum {
 typedef enum { PREPARE_SUCCESS, PREPARE_UNRECOGNIZED_STATEMENT } PrepareResult;
 ```
 
-"Unrecognized statement"? That seems a bit like an exception. I prefer not to use exceptions (and C doesn't even support them), so I'm using enum result codes wherever practical. The C compiler will complain if my switch statement doesn't handle a member of the enum, so we can feel a little more confident we handle every result of a function. Expect more result codes to be added in the future.
+"Istruzione non riconosciuta"? Sembra un po' come un'eccezione. Preferisco non usare eccezioni (e C non le supporta nemmeno), quindi sto usando codici di risultato enum ovunque sia pratico. Il compilatore C si lamenterà se il mio switch statement non gestisce un membro dell'enum, quindi possiamo sentirci un po' più sicuri di gestire ogni risultato di una funzione. Aspettati che più codici di risultato vengano aggiunti in futuro.
 
-`do_meta_command` is just a wrapper for existing functionality that leaves room for more commands:
+`do_meta_command` è solo un wrapper per la funzionalità esistente che lascia spazio per più comandi:
 
 ```c
 MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
@@ -83,7 +83,7 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
 }
 ```
 
-Our "prepared statement" right now just contains an enum with two possible values. It will contain more data as we allow parameters in statements:
+La nostra "istruzione preparata" ora contiene solo un enum con due possibili valori. Conterrà più dati quando permetteremo parametri nelle istruzioni:
 
 ```c
 typedef enum { STATEMENT_INSERT, STATEMENT_SELECT } StatementType;
@@ -93,7 +93,7 @@ typedef struct {
 } Statement;
 ```
 
-`prepare_statement` (our "SQL Compiler") does not understand SQL right now. In fact, it only understands two words:
+`prepare_statement` (il nostro "Compilatore SQL") non capisce SQL ora. In effetti, capisce solo due parole:
 ```c
 PrepareResult prepare_statement(InputBuffer* input_buffer,
                                 Statement* statement) {
@@ -110,9 +110,9 @@ PrepareResult prepare_statement(InputBuffer* input_buffer,
 }
 ```
 
-Note that we use `strncmp` for "insert" since the "insert" keyword will be followed by data. (e.g. `insert 1 cstack foo@bar.com`)
+Nota che usiamo `strncmp` per "insert" dato che la parola chiave "insert" sarà seguita da dati. (es. `insert 1 cstack foo@bar.com`)
 
-Lastly, `execute_statement` contains a few stubs:
+Infine, `execute_statement` contiene alcuni stub:
 ```c
 void execute_statement(Statement* statement) {
   switch (statement->type) {
@@ -126,9 +126,9 @@ void execute_statement(Statement* statement) {
 }
 ```
 
-Note that it doesn't return any error codes because there's nothing that could go wrong yet.
+Nota che non restituisce codici di errore perché non c'è ancora nulla che possa andare storto.
 
-With these refactors, we now recognize two new keywords!
+Con queste rifattorizzazioni, ora riconosciamo due nuove parole chiave!
 ```command-line
 ~ ./db
 db > insert foo bar
@@ -145,7 +145,7 @@ db > .exit
 ~
 ```
 
-The skeleton of our database is taking shape... wouldn't it be nice if it stored data? In the next part, we'll implement `insert` and `select`, creating the world's worst data store. In the mean time, here's the entire diff from this part:
+Lo scheletro del nostro database sta prendendo forma... non sarebbe bello se memorizzasse dati? Nella prossima parte, implementeremo `insert` e `select`, creando il peggiore data store del mondo. Nel frattempo, ecco l'intero diff di questa parte:
 
 ```diff
 @@ -10,6 +10,23 @@ struct InputBuffer_t {
@@ -212,7 +212,6 @@ The skeleton of our database is taking shape... wouldn't it be nice if it stored
      read_input(input_buffer);
  
 -    if (strcmp(input_buffer->buffer, ".exit") == 0) {
--      close_input_buffer(input_buffer);
 -      exit(EXIT_SUCCESS);
 -    } else {
 -      printf("Unrecognized command '%s'.\n", input_buffer->buffer);

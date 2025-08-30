@@ -1,13 +1,13 @@
 ---
-title: Part 4 - Our First Tests (and Bugs)
+title: Parte 4 - I Nostri Primi Test (e Bug)
 date: 2017-09-03
 ---
 
-We've got the ability to insert rows into our database and to print out all rows. Let's take a moment to test what we've got so far.
+Abbiamo la capacità di inserire righe nel nostro database e di stampare tutte le righe. Prendiamoci un momento per testare quello che abbiamo finora.
 
-I'm going to use [rspec](http://rspec.info/) to write my tests because I'm familiar with it, and the syntax is fairly readable.
+Userò [rspec](http://rspec.info/) per scrivere i miei test perché mi è familiare, e la sintassi è abbastanza leggibile.
 
-I'll define a short helper to send a list of commands to our database program then make assertions about the output:
+Definirò un breve helper per inviare una lista di comandi al nostro programma database e poi fare asserzioni sull'output:
 
 ```ruby
 describe 'database' do
@@ -20,7 +20,7 @@ describe 'database' do
 
       pipe.close_write
 
-      # Read entire output
+      # Leggi l'intero output
       raw_output = pipe.gets(nil)
     end
     raw_output.split("\n")
@@ -42,7 +42,7 @@ describe 'database' do
 end
 ```
 
-This simple test makes sure we get back what we put in. And indeed it passes:
+Questo semplice test si assicura che otteniamo quello che abbiamo messo dentro. E infatti passa:
 ```command-line
 bundle exec rspec
 .
@@ -51,7 +51,7 @@ Finished in 0.00871 seconds (files took 0.09506 seconds to load)
 1 example, 0 failures
 ```
 
-Now it's feasible to test inserting a large number of rows into the database:
+Ora è fattibile testare l'inserimento di un gran numero di righe nel database:
 ```ruby
 it 'prints error message when table is full' do
   script = (1..1401).map do |i|
@@ -63,7 +63,7 @@ it 'prints error message when table is full' do
 end
 ```
 
-Running tests again...
+Eseguendo i test di nuovo...
 ```command-line
 bundle exec rspec
 ..
@@ -72,9 +72,9 @@ Finished in 0.01553 seconds (files took 0.08156 seconds to load)
 2 examples, 0 failures
 ```
 
-Sweet, it works! Our db can hold 1400 rows right now because we set the maximum number of pages to 100, and 14 rows can fit in a page.
+Perfetto, funziona! Il nostro db può contenere 1400 righe ora perché abbiamo impostato il numero massimo di pagine a 100, e 14 righe possono stare in una pagina.
 
-Reading through the code we have so far, I realized we might not handle storing text fields correctly. Easy to test with this example:
+Leggendo attraverso il codice che abbiamo finora, ho realizzato che potremmo non gestire correttamente la memorizzazione dei campi di testo. Facile da testare con questo esempio:
 ```ruby
 it 'allows inserting strings that are the maximum length' do
   long_username = "a"*32
@@ -94,7 +94,7 @@ it 'allows inserting strings that are the maximum length' do
 end
 ```
 
-And the test fails!
+E il test fallisce!
 ```ruby
 Failures:
 
@@ -108,17 +108,17 @@ Failures:
      # ./spec/main_spec.rb:48:in `block (2 levels) in <top (required)>'
 ```
 
-If we try it ourselves, we'll see that there's some weird characters when we try to print out the row. (I'm abbreviating the long strings):
+Se lo proviamo noi stessi, vedremo che ci sono alcuni caratteri strani quando proviamo a stampare la riga. (Sto abbreviando le stringhe lunghe):
 ```command-line
 db > insert 1 aaaaa... aaaaa...
 Executed.
 db > select
-(1, aaaaa...aaa\�, aaaaa...aaa\�)
+(1, aaaaa...aaa\, aaaaa...aaa\)
 Executed.
 db >
 ```
 
-What's going on? If you take a look at our definition of a Row, we allocate exactly 32 bytes for username and exactly 255 bytes for email. But [C strings](http://www.cprogramming.com/tutorial/c/lesson9.html) are supposed to end with a null character, which we didn't allocate space for. The solution is to allocate one additional byte:
+Cosa sta succedendo? Se dai un'occhiata alla nostra definizione di una Row, allociamo esattamente 32 byte per username ed esattamente 255 byte per email. Ma le [stringhe C](http://www.cprogramming.com/tutorial/c/lesson9.html) dovrebbero terminare con un carattere null, per cui non abbiamo allocato spazio. La soluzione è allocare un byte aggiuntivo:
 ```diff
  const uint32_t COLUMN_EMAIL_SIZE = 255;
  typedef struct {
@@ -130,7 +130,7 @@ What's going on? If you take a look at our definition of a Row, we allocate exac
  } Row;
  ```
 
- And indeed that fixes it:
+ E infatti questo lo risolve:
  ```ruby
  bundle exec rspec
 ...
@@ -139,7 +139,7 @@ Finished in 0.0188 seconds (files took 0.08516 seconds to load)
 3 examples, 0 failures
 ```
 
-We should not allow inserting usernames or emails that are longer than column size. The spec for that looks like this:
+Non dovremmo permettere l'inserimento di username o email che sono più lunghi della dimensione della colonna. La specifica per quello è così:
 ```ruby
 it 'prints error message if strings are too long' do
   long_username = "a"*33
@@ -158,7 +158,7 @@ it 'prints error message if strings are too long' do
 end
 ```
 
-In order to do this we need to upgrade our parser. As a reminder, we're currently using [scanf()](https://linux.die.net/man/3/scanf):
+Per fare questo dobbiamo aggiornare il nostro parser. Come promemoria, stiamo attualmente usando [scanf()](https://linux.die.net/man/3/scanf):
 ```c
 if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
   statement->type = STATEMENT_INSERT;
@@ -172,9 +172,9 @@ if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
 }
 ```
 
-But [scanf has some disadvantages](https://stackoverflow.com/questions/2430303/disadvantages-of-scanf). If the string it's reading is larger than the buffer it's reading into, it will cause a buffer overflow and start writing into unexpected places. We want to check the length of each string before we copy it into a `Row` structure. And to do that, we need to divide the input by spaces.
+Ma [scanf ha alcuni svantaggi](https://stackoverflow.com/questions/2430303/disadvantages-of-scanf). Se la stringa che sta leggendo è più grande del buffer in cui sta leggendo, causerà un buffer overflow e inizierà a scrivere in posti inaspettati. Vogliamo controllare la lunghezza di ogni stringa prima di copiarla in una struttura `Row`. E per fare quello, dobbiamo dividere l'input per spazi.
 
-I'm going to use [strtok()](http://www.cplusplus.com/reference/cstring/strtok/) to do that. I think it's easiest to understand if you see it in action:
+Userò [strtok()](http://www.cplusplus.com/reference/cstring/strtok/) per fare quello. Penso che sia più facile da capire se lo vedi in azione:
 
 ```diff
 +PrepareResult prepare_insert(InputBuffer* input_buffer, Statement* statement) {
@@ -219,11 +219,11 @@ I'm going to use [strtok()](http://www.cplusplus.com/reference/cstring/strtok/) 
    }
 ```
 
-Calling `strtok` successively on the input buffer breaks it into substrings by inserting a null character whenever it reaches a delimiter (space, in our case). It returns a pointer to the start of the substring.
+Chiamare `strtok` successivamente sul buffer di input lo divide in sottostringhe inserendo un carattere null ogni volta che raggiunge un delimitatore (spazio, nel nostro caso). Restituisce un puntatore all'inizio della sottostringa.
 
-We can call [strlen()](http://www.cplusplus.com/reference/cstring/strlen/) on each text value to see if it's too long.
+Possiamo chiamare [strlen()](http://www.cplusplus.com/reference/cstring/strlen/) su ogni valore di testo per vedere se è troppo lungo.
 
-We can handle the error like we do any other error code:
+Possiamo gestire l'errore come facciamo per qualsiasi altro codice di errore:
 ```diff
  enum PrepareResult_t {
    PREPARE_SUCCESS,
@@ -244,7 +244,7 @@ We can handle the error like we do any other error code:
      continue;
 ```
 
-Which makes our test pass
+Il che fa passare il nostro test
 ```command-line
 bundle exec rspec
 ....
@@ -253,7 +253,7 @@ Finished in 0.02284 seconds (files took 0.116 seconds to load)
 4 examples, 0 failures
 ```
 
-While we're here, we might as well handle one more error case:
+Mentre siamo qui, potremmo anche gestire un altro caso di errore:
 ```ruby
 it 'prints an error message if id is negative' do
   script = [
@@ -298,11 +298,11 @@ end
          continue;
 ```
 
-Alright, that's enough testing for now. Next is a very important feature: persistence! We're going to save our database to a file and read it back out again.
+Perfetto, abbastanza test per ora. Il prossimo è una funzionalità molto importante: la persistenza! Salveremo il nostro database in un file e lo leggeremo di nuovo.
 
-It's gonna be great.
+Sarà fantastico.
 
-Here's the complete diff for this part:
+Ecco il diff completo per questa parte:
 ```diff
 @@ -22,6 +22,8 @@
 
@@ -333,11 +333,10 @@ Here's the complete diff for this part:
 +PrepareResult prepare_insert(InputBuffer* input_buffer, Statement* statement) {
    statement->type = STATEMENT_INSERT;
 -  int args_assigned = sscanf(
--     input_buffer->buffer, "insert %d %s %s", &(statement->row_to_insert.id),
+-     input_buffer->buffer, "insert %d %d %s", &(statement->row_to_insert.id),
 -     statement->row_to_insert.username, statement->row_to_insert.email
 -     );
 -  if (args_assigned < 3) {
-+
 +  char* keyword = strtok(input_buffer->buffer, " ");
 +  char* id_string = strtok(NULL, " ");
 +  char* username = strtok(NULL, " ");
@@ -386,7 +385,7 @@ Here's the complete diff for this part:
  	printf("Syntax error. Could not parse statement.\n");
  	continue;
 ```
-And we added tests:
+E abbiamo aggiunto test:
 ```diff
 +describe 'database' do
 +  def run_script(commands)
@@ -398,7 +397,7 @@ And we added tests:
 +
 +      pipe.close_write
 +
-+      # Read entire output
++      # Leggi l'intero output
 +      raw_output = pipe.gets(nil)
 +    end
 +    raw_output.split("\n")

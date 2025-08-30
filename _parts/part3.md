@@ -1,31 +1,31 @@
 ---
-title: Part 3 - An In-Memory, Append-Only, Single-Table Database
+title: Parte 3 - Un Database In-Memory, Append-Only, a Singola Tabella
 date: 2017-09-01
 ---
 
-We're going to start small by putting a lot of limitations on our database. For now, it will:
+Inizieremo in piccolo mettendo molte limitazioni al nostro database. Per ora, farà:
 
-- support two operations: inserting a row and printing all rows
-- reside only in memory (no persistence to disk)
-- support a single, hard-coded table
+- supportare due operazioni: inserire una riga e stampare tutte le righe
+- risiedere solo in memoria (nessuna persistenza su disco)
+- supportare una singola tabella hard-coded
 
-Our hard-coded table is going to store users and look like this:
+La nostra tabella hard-coded memorizzerà utenti e sarà così:
 
-| column   | type         |
+| colonna  | tipo         |
 |----------|--------------|
 | id       | integer      |
 | username | varchar(32)  |
 | email    | varchar(255) |
 
-This is a simple schema, but it gets us to support multiple data types and multiple sizes of text data types.
+Questo è uno schema semplice, ma ci porta a supportare più tipi di dati e più dimensioni di tipi di dati di testo.
 
-`insert` statements are now going to look like this:
+Le istruzioni `insert` ora saranno così:
 
 ```
 insert 1 cstack foo@bar.com
 ```
 
-That means we need to upgrade our `prepare_statement` function to parse arguments
+Questo significa che dobbiamo aggiornare la nostra funzione `prepare_statement` per analizzare gli argomenti
 
 ```diff
    if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
@@ -41,7 +41,7 @@ That means we need to upgrade our `prepare_statement` function to parse argument
    if (strcmp(input_buffer->buffer, "select") == 0) {
 ```
 
-We store those parsed arguments into a new `Row` data structure inside the statement object:
+Memorizziamo quegli argomenti analizzati in una nuova struttura dati `Row` all'interno dell'oggetto statement:
 
 ```diff
 +#define COLUMN_USERNAME_SIZE 32
@@ -54,21 +54,21 @@ We store those parsed arguments into a new `Row` data structure inside the state
 +
  typedef struct {
    StatementType type;
-+  Row row_to_insert;  // only used by insert statement
++  Row row_to_insert;  // usato solo dall'istruzione insert
  } Statement;
 ```
 
-Now we need to copy that data into some data structure representing the table. SQLite uses a B-tree for fast lookups, inserts and deletes. We'll start with something simpler. Like a B-tree, it will group rows into pages, but instead of arranging those pages as a tree it will arrange them as an array.
+Ora dobbiamo copiare quei dati in qualche struttura dati che rappresenta la tabella. SQLite usa un B-tree per ricerche, inserimenti e cancellazioni veloci. Inizieremo con qualcosa di più semplice. Come un B-tree, raggrupperà le righe in pagine, ma invece di organizzare quelle pagine come un albero le organizzerà come un array.
 
-Here's my plan:
+Ecco il mio piano:
 
-- Store rows in blocks of memory called pages
-- Each page stores as many rows as it can fit
-- Rows are serialized into a compact representation with each page
-- Pages are only allocated as needed
-- Keep a fixed-size array of pointers to pages
+- Memorizzare righe in blocchi di memoria chiamati pagine
+- Ogni pagina memorizza quante righe può contenere
+- Le righe sono serializzate in una rappresentazione compatta con ogni pagina
+- Le pagine sono allocate solo quando necessario
+- Mantenere un array di dimensione fissa di puntatori alle pagine
 
-First we'll define the compact representation of a row:
+Prima definiremo la rappresentazione compatta di una riga:
 ```diff
 +#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 +
@@ -81,16 +81,16 @@ First we'll define the compact representation of a row:
 +const uint32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 ```
 
-This means the layout of a serialized row will look like this:
+Questo significa che il layout di una riga serializzata sarà così:
 
-| column   | size (bytes) | offset       |
-|----------|--------------|--------------|
-| id       | 4            | 0            |
-| username | 32           | 4            |
-| email    | 255          | 36           |
-| total    | 291          |              |
+| colonna  | dimensione (byte) | offset       |
+|----------|------------------|--------------|
+| id       | 4                | 0            |
+| username | 32               | 4            |
+| email    | 255              | 36           |
+| totale   | 291              |              |
 
-We also need code to convert to and from the compact representation.
+Abbiamo anche bisogno di codice per convertire da e verso la rappresentazione compatta.
 ```diff
 +void serialize_row(Row* source, void* destination) {
 +  memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
@@ -105,7 +105,7 @@ We also need code to convert to and from the compact representation.
 +}
 ```
 
-Next, a `Table` structure that points to pages of rows and keeps track of how many rows there are:
+Poi, una struttura `Table` che punta alle pagine di righe e tiene traccia di quante righe ci sono:
 ```diff
 +const uint32_t PAGE_SIZE = 4096;
 +#define TABLE_MAX_PAGES 100
@@ -118,19 +118,19 @@ Next, a `Table` structure that points to pages of rows and keeps track of how ma
 +} Table;
 ```
 
-I'm making our page size 4 kilobytes because it's the same size as a page used in the virtual memory systems of most computer architectures. This means one page in our database corresponds to one page used by the operating system. The operating system will move pages in and out of memory as whole units instead of breaking them up.
+Sto facendo la dimensione della nostra pagina 4 kilobyte perché è la stessa dimensione di una pagina usata nei sistemi di memoria virtuale della maggior parte delle architetture informatiche. Questo significa che una pagina nel nostro database corrisponde a una pagina usata dal sistema operativo. Il sistema operativo sposterà le pagine dentro e fuori dalla memoria come unità intere invece di spezzarle.
 
-I'm setting an arbitrary limit of 100 pages that we will allocate. When we switch to a tree structure, our database's maximum size will only be limited by the maximum size of a file. (Although we'll still limit how many pages we keep in memory at once)
+Sto impostando un limite arbitrario di 100 pagine che allocheremo. Quando passeremo a una struttura ad albero, la dimensione massima del nostro database sarà limitata solo dalla dimensione massima di un file. (Anche se limiteremo ancora quante pagine manteniamo in memoria contemporaneamente)
 
-Rows should not cross page boundaries. Since pages probably won't exist next to each other in memory, this assumption makes it easier to read/write rows.
+Le righe non dovrebbero attraversare i confini delle pagine. Dato che le pagine probabilmente non esisteranno una accanto all'altra in memoria, questa assunzione rende più facile leggere/scrivere righe.
 
-Speaking of which, here is how we figure out where to read/write in memory for a particular row:
+A proposito, ecco come calcoliamo dove leggere/scrivere in memoria per una particolare riga:
 ```diff
 +void* row_slot(Table* table, uint32_t row_num) {
 +  uint32_t page_num = row_num / ROWS_PER_PAGE;
 +  void* page = table->pages[page_num];
 +  if (page == NULL) {
-+    // Allocate memory only when we try to access page
++    // Alloca memoria solo quando proviamo ad accedere alla pagina
 +    page = table->pages[page_num] = malloc(PAGE_SIZE);
 +  }
 +  uint32_t row_offset = row_num % ROWS_PER_PAGE;
@@ -139,47 +139,42 @@ Speaking of which, here is how we figure out where to read/write in memory for a
 +}
 ```
 
-Now we can make `execute_statement` read/write from our table structure:
+Ora possiamo far sì che `execute_statement` legga/scriva dalla nostra struttura tabella:
 ```diff
 -void execute_statement(Statement* statement) {
 +ExecuteResult execute_insert(Statement* statement, Table* table) {
 +  if (table->num_rows >= TABLE_MAX_ROWS) {
 +    return EXECUTE_TABLE_FULL;
 +  }
-+
-+  Row* row_to_insert = &(statement->row_to_insert);
-+
-+  serialize_row(row_to_insert, row_slot(table, table->num_rows));
-+  table->num_rows += 1;
-+
-+  return EXECUTE_SUCCESS;
-+}
-+
-+ExecuteResult execute_select(Statement* statement, Table* table) {
-+  Row row;
-+  for (uint32_t i = 0; i < table->num_rows; i++) {
-+    deserialize_row(row_slot(table, i), &row);
-+    print_row(&row);
-+  }
-+  return EXECUTE_SUCCESS;
-+}
-+
-+ExecuteResult execute_statement(Statement* statement, Table* table) {
-   switch (statement->type) {
-     case (STATEMENT_INSERT):
--      printf("This is where we would do an insert.\n");
--      break;
-+      return execute_insert(statement, table);
-     case (STATEMENT_SELECT):
--      printf("This is where we would do a select.\n");
--      break;
-+      return execute_select(statement, table);
-   }
- }
+
+  Row* row_to_insert = &(statement->row_to_insert);
+
+  serialize_row(row_to_insert, row_slot(table, table->num_rows));
+  table->num_rows += 1;
+
+  return EXECUTE_SUCCESS;
+}
+
+ExecuteResult execute_select(Statement* statement, Table* table) {
+  Row row;
+  for (uint32_t i = 0; i < table->num_rows; i++) {
+    deserialize_row(row_slot(table, i), &row);
+    print_row(&row);
+  }
+  return EXECUTE_SUCCESS;
+}
+
+ExecuteResult execute_statement(Statement* statement, Table *table) {
+  switch (statement->type) {
+    case (STATEMENT_INSERT):
+       	return execute_insert(statement, table);
+    case (STATEMENT_SELECT):
+	return execute_select(statement, table);
+  }
+}
 ```
 
-Lastly, we need to initialize the table, create the respective
-memory release function and handle a few more error cases:
+Infine, dobbiamo inizializzare la tabella, creare la rispettiva funzione di rilascio della memoria e gestire alcuni altri casi di errore:
 
 ```diff
 + Table* new_table() {
@@ -231,7 +226,7 @@ memory release function and handle a few more error cases:
  }
  ```
 
- With those changes we can actually save data in our database!
+ Con queste modifiche possiamo effettivamente salvare dati nel nostro database!
  ```command-line
 ~ ./db
 db > insert 1 cstack foo@bar.com
@@ -248,11 +243,11 @@ db > .exit
 ~
 ```
 
-Now would be a great time to write some tests, for a couple reasons:
-- We're planning to dramatically change the data structure storing our table, and tests would catch regressions.
-- There are a couple edge cases we haven't tested manually (e.g. filling up the table)
+Ora sarebbe un ottimo momento per scrivere alcuni test, per un paio di motivi:
+- Stiamo pianificando di cambiare drasticamente la struttura dati che memorizza la nostra tabella, e i test catturerebbero regressioni.
+- Ci sono alcuni casi limite che non abbiamo testato manualmente (es. riempire la tabella)
 
-We'll address those issues in the next part. For now, here's the complete diff from this part:
+Affronteremo questi problemi nella prossima parte. Per ora, ecco il diff completo di questa parte:
 ```diff
 @@ -2,6 +2,7 @@
  #include <stdio.h>
@@ -290,14 +285,13 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +
 +typedef struct {
 +  StatementType type;
-+  Row row_to_insert; //only used by insert statement
++  Row row_to_insert; //usato solo dall'istruzione insert
 +} Statement;
 +
 +#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 +
 +const uint32_t ID_SIZE = size_of_attribute(Row, id);
 +const uint32_t USERNAME_SIZE = size_of_attribute(Row, username);
-+const uint32_t EMAIL_SIZE = size_of_attribute(Row, email);
 +const uint32_t ID_OFFSET = 0;
 +const uint32_t USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
 +const uint32_t EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
@@ -333,7 +327,7 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +  uint32_t page_num = row_num / ROWS_PER_PAGE;
 +  void *page = table->pages[page_num];
 +  if (page == NULL) {
-+     // Allocate memory only when we try to access page
++     // Alloca memoria solo quando proviamo ad accedere alla pagina
 +     page = table->pages[page_num] = malloc(PAGE_SIZE);
 +  }
 +  uint32_t row_offset = row_num % ROWS_PER_PAGE;
@@ -391,23 +385,23 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +    statement->type = STATEMENT_SELECT;
 +    return PREPARE_SUCCESS;
 +  }
-+
-+  return PREPARE_UNRECOGNIZED_STATEMENT;
-+}
-+
+
+  return PREPARE_UNRECOGNIZED_STATEMENT;
+}
+
 +ExecuteResult execute_insert(Statement* statement, Table* table) {
 +  if (table->num_rows >= TABLE_MAX_ROWS) {
 +     return EXECUTE_TABLE_FULL;
 +  }
-+
-+  Row* row_to_insert = &(statement->row_to_insert);
-+
-+  serialize_row(row_to_insert, row_slot(table, table->num_rows));
-+  table->num_rows += 1;
-+
-+  return EXECUTE_SUCCESS;
-+}
-+
+
+  Row* row_to_insert = &(statement->row_to_insert);
+
+  serialize_row(row_to_insert, row_slot(table, table->num_rows));
+  table->num_rows += 1;
+
+  return EXECUTE_SUCCESS;
+}
+
 +ExecuteResult execute_select(Statement* statement, Table* table) {
 +  Row row;
 +  for (uint32_t i = 0; i < table->num_rows; i++) {
@@ -415,8 +409,8 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +     print_row(&row);
 +  }
 +  return EXECUTE_SUCCESS;
-+}
-+
+}
+
 +ExecuteResult execute_statement(Statement* statement, Table *table) {
 +  switch (statement->type) {
 +    case (STATEMENT_INSERT):
@@ -425,7 +419,7 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +	return execute_select(statement, table);
 +  }
 +}
-+
+
  int main(int argc, char* argv[]) {
 +  Table* table = new_table();
    InputBuffer* input_buffer = new_input_buffer();
@@ -447,27 +441,27 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +          continue;
 +      }
 +    }
-+
-+    Statement statement;
-+    switch (prepare_statement(input_buffer, &statement)) {
-+      case (PREPARE_SUCCESS):
-+        break;
-+      case (PREPARE_SYNTAX_ERROR):
-+	printf("Syntax error. Could not parse statement.\n");
-+	continue;
-+      case (PREPARE_UNRECOGNIZED_STATEMENT):
-+        printf("Unrecognized keyword at start of '%s'.\n",
-+               input_buffer->buffer);
-+        continue;
-+    }
-+
-+    switch (execute_statement(&statement, table)) {
-+	case (EXECUTE_SUCCESS):
-+	    printf("Executed.\n");
-+	    break;
-+	case (EXECUTE_TABLE_FULL):
-+	    printf("Error: Table full.\n");
-+	    break;
+
+     Statement statement;
+     switch (prepare_statement(input_buffer, &statement)) {
+       case (PREPARE_SUCCESS):
+         break;
+       case (PREPARE_SYNTAX_ERROR):
+	printf("Syntax error. Could not parse statement.\n");
+	continue;
+      case (PREPARE_UNRECOGNIZED_STATEMENT):
+        printf("Unrecognized keyword at start of '%s'.\n",
+               input_buffer->buffer);
+        continue;
+     }
+
+     switch (execute_statement(&statement, table)) {
+	case (EXECUTE_SUCCESS):
+	    printf("Executed.\n");
+	    break;
+	case (EXECUTE_TABLE_FULL):
+	    printf("Error: Table full.\n");
+	    break;
      }
    }
  }

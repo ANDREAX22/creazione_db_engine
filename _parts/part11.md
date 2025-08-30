@@ -1,16 +1,16 @@
 ---
-title: Part 11 - Recursively Searching the B-Tree
+title: Parte 11 - Ricerca Ricorsiva del B-Tree
 date: 2017-10-22
 ---
 
-Last time we ended with an error inserting our 15th row:
+L'ultima volta abbiamo finito con un errore inserendo la nostra 15ª riga:
 
 ```
 db > insert 15 user15 person15@example.com
 Need to implement searching an internal node
 ```
 
-First, replace the code stub with a new function call.
+Prima, sostituiamo il codice stub con una nuova chiamata di funzione.
 
 ```diff
    if (get_node_type(root_node) == NODE_LEAF) {
@@ -23,20 +23,20 @@ First, replace the code stub with a new function call.
  }
 ```
 
-This function will perform binary search to find the child that should contain the given key. Remember that the key to the right of each child pointer is the maximum key contained by that child.
+Questa funzione eseguirà la ricerca binaria per trovare il figlio che dovrebbe contenere la chiave data. Ricorda che la chiave alla destra di ogni puntatore figlio è la chiave massima contenuta da quel figlio.
 
-{% include image.html url="assets/images/btree6.png" description="three-level btree" %}
+{% include image.html url="assets/images/btree6.png" description="btree a tre livelli" %}
 
-So our binary search compares the key to find and the key to the right of the child pointer:
+Quindi la nostra ricerca binaria confronta la chiave da trovare e la chiave alla destra del puntatore figlio:
 
 ```diff
 +Cursor* internal_node_find(Table* table, uint32_t page_num, uint32_t key) {
 +  void* node = get_page(table->pager, page_num);
 +  uint32_t num_keys = *internal_node_num_keys(node);
 +
-+  /* Binary search to find index of child to search */
++  /* Ricerca binaria per trovare l'indice del figlio da cercare */
 +  uint32_t min_index = 0;
-+  uint32_t max_index = num_keys; /* there is one more child than key */
++  uint32_t max_index = num_keys; /* c'è un figlio in più delle chiavi */
 +
 +  while (min_index != max_index) {
 +    uint32_t index = (min_index + max_index) / 2;
@@ -49,7 +49,7 @@ So our binary search compares the key to find and the key to the right of the ch
 +  }
 ```
 
-Also remember that the children of an internal node can be either leaf nodes or more internal nodes. After we find the correct child, call the appropriate search function on it:
+Ricorda anche che i figli di un nodo interno possono essere nodi foglia o più nodi interni. Dopo aver trovato il figlio corretto, chiamiamo la funzione di ricerca appropriata su di esso:
 
 ```diff
 +  uint32_t child_num = *internal_node_child(node, min_index);
@@ -63,9 +63,9 @@ Also remember that the children of an internal node can be either leaf nodes or 
 +}
 ```
 
-# Tests
+# Test
 
-Now inserting a key into a multi-node btree no longer results in an error. And we can update our test:
+Ora inserire una chiave in un btree multi-nodo non risulta più in un errore. E possiamo aggiornare il nostro test:
 
 ```diff
        "    - 12",
@@ -78,7 +78,7 @@ Now inserting a key into a multi-node btree no longer results in an error. And w
    end
 ```
 
-I also think it's time we revisit another test. The one that tries inserting 1400 rows. It still errors, but the error message is new. Right now, our tests don't handle it very well when the program crashes. If that happens, let's just use the output we've gotten so far:
+Penso anche che sia tempo di rivisitare un altro test. Quello che prova a inserire 1400 righe. Ancora dà errore, ma il messaggio di errore è nuovo. Ora, i nostri test non gestiscono molto bene quando il programma si blocca. Se succede, usiamo semplicemente l'output che abbiamo ottenuto finora:
 
 ```diff
      raw_output = nil
@@ -95,7 +95,7 @@ I also think it's time we revisit another test. The one that tries inserting 140
        pipe.close_write
 ```
 
-And that reveals that our 1400-row test outputs this error:
+E questo rivela che il nostro test di 1400 righe produce questo errore:
 
 ```diff
      end
@@ -109,5 +109,5 @@ And that reveals that our 1400-row test outputs this error:
    end
 ```
 
-Looks like that's next on our to-do list!
+Sembra che quello sia il prossimo nella nostra lista di cose da fare!
 

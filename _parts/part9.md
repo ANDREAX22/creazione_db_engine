@@ -1,11 +1,11 @@
 ---
-title: Part 9 - Binary Search and Duplicate Keys
+title: Parte 9 - Ricerca Binaria e Chiavi Duplicate
 date: 2017-10-01
 ---
 
-Last time we noted that we're still storing keys in unsorted order. We're going to fix that problem, plus detect and reject duplicate keys.
+L'ultima volta abbiamo notato che stiamo ancora memorizzando le chiavi in ordine non ordinato. Risolveremo quel problema, più rilevare e rifiutare chiavi duplicate.
 
-Right now, our `execute_insert()` function always chooses to insert at the end of the table. Instead, we should search the table for the correct place to insert, then insert there. If the key already exists there, return an error.
+Ora, la nostra funzione `execute_insert()` sceglie sempre di inserire alla fine della tabella. Invece, dovremmo cercare nella tabella il posto giusto per inserire, poi inserire lì. Se la chiave esiste già lì, restituire un errore.
 
 ```diff
 ExecuteResult execute_insert(Statement* statement, Table* table) {
@@ -31,7 +31,7 @@ ExecuteResult execute_insert(Statement* statement, Table* table) {
    leaf_node_insert(cursor, row_to_insert->id, row_to_insert);
 ```
 
-We don't need the `table_end()` function anymore.
+Non abbiamo più bisogno della funzione `table_end()`.
 
 ```diff
 -Cursor* table_end(Table* table) {
@@ -48,13 +48,13 @@ We don't need the `table_end()` function anymore.
 -}
 ```
 
-We'll replace it with a method that searches the tree for a given key.
+La sostituiremo con un metodo che cerca nell'albero una data chiave.
 
 ```diff
 +/*
-+Return the position of the given key.
-+If the key is not present, return the position
-+where it should be inserted
++Restituisce la posizione della chiave data.
++Se la chiave non è presente, restituisce la posizione
++dove dovrebbe essere inserita
 +*/
 +Cursor* table_find(Table* table, uint32_t key) {
 +  uint32_t root_page_num = table->root_page_num;
@@ -66,10 +66,10 @@ We'll replace it with a method that searches the tree for a given key.
 +    printf("Need to implement searching an internal node\n");
 +    exit(EXIT_FAILURE);
 +  }
-+}
+}
 ```
 
-I'm stubbing out the branch for internal nodes because we haven't implemented internal nodes yet. We can search the leaf node with binary search.
+Sto creando uno stub per il ramo dei nodi interni perché non abbiamo ancora implementato i nodi interni. Possiamo cercare il nodo foglia con la ricerca binaria.
 
 ```diff
 +Cursor* leaf_node_find(Table* table, uint32_t page_num, uint32_t key) {
@@ -80,7 +80,7 @@ I'm stubbing out the branch for internal nodes because we haven't implemented in
 +  cursor->table = table;
 +  cursor->page_num = page_num;
 +
-+  // Binary search
++  // Ricerca binaria
 +  uint32_t min_index = 0;
 +  uint32_t one_past_max_index = num_cells;
 +  while (one_past_max_index != min_index) {
@@ -102,12 +102,12 @@ I'm stubbing out the branch for internal nodes because we haven't implemented in
 +}
 ```
 
-This will either return
-- the position of the key,
-- the position of another key that we'll need to move if we want to insert the new key, or
-- the position one past the last key
+Questo restituirà
+- la posizione della chiave,
+- la posizione di un'altra chiave che dovremo spostare se vogliamo inserire la nuova chiave, o
+- la posizione oltre l'ultima chiave
 
-Since we're now checking node type, we need functions to get and set that value in a node.
+Dato che ora stiamo controllando il tipo di nodo, abbiamo bisogno di funzioni per ottenere e impostare quel valore in un nodo.
 
 ```diff
 +NodeType get_node_type(void* node) {
@@ -121,9 +121,9 @@ Since we're now checking node type, we need functions to get and set that value 
 +}
 ```
 
-We have to cast to `uint8_t` first to ensure it's serialized as a single byte.
+Dobbiamo fare il cast a `uint8_t` prima per assicurarci che sia serializzato come un singolo byte.
 
-We also need to initialize node type.
+Abbiamo anche bisogno di inizializzare il tipo di nodo.
 
 ```diff
 -void initialize_leaf_node(void* node) { *leaf_node_num_cells(node) = 0; }
@@ -133,7 +133,7 @@ We also need to initialize node type.
 +}
 ```
 
-Lastly, we need to make and handle a new error code.
+Infine, dobbiamo creare e gestire un nuovo codice di errore.
 
 ```diff
 -enum ExecuteResult_t { EXECUTE_SUCCESS, EXECUTE_TABLE_FULL };
@@ -156,7 +156,7 @@ Lastly, we need to make and handle a new error code.
          break;
 ```
 
-With these changes, our test can change to check for sorted order:
+Con queste modifiche, il nostro test può cambiare per controllare l'ordine ordinato:
 
 ```diff
        "db > Executed.",
@@ -173,7 +173,7 @@ With these changes, our test can change to check for sorted order:
    end
 ```
 
-And we can add a new test for duplicate keys:
+E possiamo aggiungere un nuovo test per chiavi duplicate:
 
 ```diff
 +  it 'prints an error message if there is a duplicate id' do
@@ -194,4 +194,4 @@ And we can add a new test for duplicate keys:
 +  end
 ```
 
-That's it! Next up: implement splitting leaf nodes and creating internal nodes.
+Questo è tutto! Prossimo: implementare la divisione dei nodi foglia e la creazione di nodi interni.

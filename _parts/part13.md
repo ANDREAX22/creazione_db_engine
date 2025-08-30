@@ -1,20 +1,20 @@
 ---
-title: Part 13 - Updating Parent Node After a Split
+title: Parte 13 - Aggiornamento del Nodo Genitore Dopo una Divisione
 date: 2017-11-26
 ---
 
-For the next step on our epic b-tree implementation journey, we're going to handle fixing up the parent node after splitting a leaf. I'm going to use the following example as a reference:
+Per il prossimo passo del nostro epico viaggio di implementazione dell'albero b, gestiremo la riparazione del nodo genitore dopo aver diviso una foglia. Userò il seguente esempio come riferimento:
 
-{% include image.html url="assets/images/updating-internal-node.png" description="Example of updating internal node" %}
+{% include image.html url="assets/images/updating-internal-node.png" description="Esempio di aggiornamento nodo interno" %}
 
-In this example, we add the key "3" to the tree. That causes the left leaf node to split. After the split we fix up the tree by doing the following:
+In questo esempio, aggiungiamo la chiave "3" all'albero. Questo causa la divisione del nodo foglia sinistro. Dopo la divisione ripariamo l'albero facendo quanto segue:
 
-1. Update the first key in the parent to be the maximum key in the left child ("3")
-2. Add a new child pointer / key pair after the updated key
-  - The new pointer points to the new child node
-  - The new key is the maximum key in the new child node ("5")
+1. Aggiorniamo la prima chiave nel genitore per essere la chiave massima nel figlio sinistro ("3")
+2. Aggiungiamo una nuova coppia puntatore figlio / chiave dopo la chiave aggiornata
+  - Il nuovo puntatore punta al nuovo nodo figlio
+  - La nuova chiave è la chiave massima nel nuovo nodo figlio ("5")
 
-So first things first, replace our stub code with two new function calls: `update_internal_node_key()` for step 1 and `internal_node_insert()` for step 2
+Quindi prima di tutto, sostituiamo il nostro codice stub con due nuove chiamate di funzione: `update_internal_node_key()` per il passo 1 e `internal_node_insert()` per il passo 2
 
 
 ```diff
@@ -47,7 +47,7 @@ So first things first, replace our stub code with two new function calls: `updat
  }
 ```
 
-In order to get a reference to the parent, we need to start recording in each node a pointer to its parent node.
+Per ottenere un riferimento al genitore, dobbiamo iniziare a registrare in ogni nodo un puntatore al suo nodo genitore.
 
 ```diff
 +uint32_t* node_parent(void* node) { return node + PARENT_POINTER_OFFSET; }
@@ -62,7 +62,7 @@ In order to get a reference to the parent, we need to start recording in each no
  }
 ```
 
-Now we need to find the affected cell in the parent node. The child doesn't know its own page number, so we can't look for that. But it does know its own maximum key, so we can search the parent for that key.
+Ora dobbiamo trovare la cella interessata nel nodo genitore. Il figlio non conosce il proprio numero di pagina, quindi non possiamo cercare quello. Ma conosce la propria chiave massima, quindi possiamo cercare il genitore per quella chiave.
 
 ```diff
 +void update_internal_node_key(void* node, uint32_t old_key, uint32_t new_key) {
@@ -71,21 +71,21 @@ Now we need to find the affected cell in the parent node. The child doesn't know
  }
 ```
 
-Inside `internal_node_find_child()` we'll reuse some code we already have for finding a key in an internal node. Refactor `internal_node_find()` to use the new helper method.
+All'interno di `internal_node_find_child()` riutilizzeremo del codice che abbiamo già per trovare una chiave in un nodo interno. Rifattorizziamo `internal_node_find()` per usare il nuovo metodo helper.
 
 ```diff
 -Cursor* internal_node_find(Table* table, uint32_t page_num, uint32_t key) {
 -  void* node = get_page(table->pager, page_num);
 +uint32_t internal_node_find_child(void* node, uint32_t key) {
 +  /*
-+  Return the index of the child which should contain
-+  the given key.
++  Restituisce l'indice del figlio che dovrebbe contenere
++  la chiave data.
 +  */
 +
    uint32_t num_keys = *internal_node_num_keys(node);
  
 -  /* Binary search to find index of child to search */
-+  /* Binary search */
++  /* Ricerca binaria */
    uint32_t min_index = 0;
    uint32_t max_index = num_keys; /* there is one more child than key */
  
@@ -107,13 +107,13 @@ Inside `internal_node_find_child()` we'll reuse some code we already have for fi
      case NODE_LEAF:
 ```
 
-Now we get to the heart of this article, implementing `internal_node_insert()`. I'll explain it in pieces.
+Ora arriviamo al cuore di questo articolo, implementando `internal_node_insert()`. Lo spiegherò a pezzi.
 
 ```diff
 +void internal_node_insert(Table* table, uint32_t parent_page_num,
 +                          uint32_t child_page_num) {
 +  /*
-+  Add a new child/key pair to parent that corresponds to child
++  Aggiunge una nuova coppia figlio/chiave al genitore che corrisponde al figlio
 +  */
 +
 +  void* parent = get_page(table->pager, parent_page_num);
@@ -130,11 +130,11 @@ Now we get to the heart of this article, implementing `internal_node_insert()`. 
 +  }
 ```
 
-The index where the new cell (child/key pair) should be inserted depends on the maximum key in the new child. In the example we looked at, `child_max_key` would be 5 and `index` would be 1.
+L'indice dove dovrebbe essere inserita la nuova cella (coppia figlio/chiave) dipende dalla chiave massima nel nuovo figlio. Nell'esempio che abbiamo guardato, `child_max_key` sarebbe 5 e `index` sarebbe 1.
 
-If there's no room in the internal node for another cell, throw an error. We'll implement that later.
+Se non c'è spazio nel nodo interno per un'altra cella, lancia un errore. Lo implementeremo più tardi.
 
-Now let's look at the rest of the function:
+Ora guardiamo il resto della funzione:
 
 ```diff
 +
@@ -142,13 +142,13 @@ Now let's look at the rest of the function:
 +  void* right_child = get_page(table->pager, right_child_page_num);
 +
 +  if (child_max_key > get_node_max_key(right_child)) {
-+    /* Replace right child */
++    /* Sostituisce il figlio destro */
 +    *internal_node_child(parent, original_num_keys) = right_child_page_num;
 +    *internal_node_key(parent, original_num_keys) =
 +        get_node_max_key(right_child);
 +    *internal_node_right_child(parent) = child_page_num;
 +  } else {
-+    /* Make room for the new cell */
++    /* Fa spazio per la nuova cella */
 +    for (uint32_t i = original_num_keys; i > index; i--) {
 +      void* destination = internal_node_cell(parent, i);
 +      void* source = internal_node_cell(parent, i - 1);
@@ -160,24 +160,24 @@ Now let's look at the rest of the function:
 +}
 ```
 
-Because we store the rightmost child pointer separately from the rest of the child/key pairs, we have to handle things differently if the new child is going to become the rightmost child.
+Poiché memorizziamo il puntatore figlio più a destra separatamente dal resto delle coppie figlio/chiave, dobbiamo gestire le cose diversamente se il nuovo figlio diventerà il figlio più a destra.
 
-In our example, we would get into the `else` block. First we make room for the new cell by shifting other cells one space to the right. (Although in our example there are 0 cells to shift)
+Nel nostro esempio, entreremmo nel blocco `else`. Prima facciamo spazio per la nuova cella spostando altre celle di uno spazio a destra. (Anche se nel nostro esempio ci sono 0 celle da spostare)
 
-Next, we write the new child pointer and key into the cell determined by `index`.
+Poi, scriviamo il nuovo puntatore figlio e la chiave nella cella determinata da `index`.
 
-To reduce the size of testcases needed, I'm hardcoding `INTERNAL_NODE_MAX_CELLS` for now
+Per ridurre la dimensione dei testcase necessari, sto hardcodando `INTERNAL_NODE_MAX_CELLS` per ora
 
 ```diff
 @@ -126,6 +126,8 @@ const uint32_t INTERNAL_NODE_KEY_SIZE = sizeof(uint32_t);
  const uint32_t INTERNAL_NODE_CHILD_SIZE = sizeof(uint32_t);
  const uint32_t INTERNAL_NODE_CELL_SIZE =
      INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
-+/* Keep this small for testing */
++/* Mantieni questo piccolo per i test */
 +const uint32_t INTERNAL_NODE_MAX_CELLS = 3;
 ```
 
-Speaking of tests, our large-dataset test gets past our old stub and gets to our new one:
+A proposito di test, il nostro test di dataset grande supera il nostro vecchio stub e arriva al nostro nuovo:
 
 ```diff
 @@ -65,7 +65,7 @@ describe 'database' do
@@ -189,9 +189,9 @@ Speaking of tests, our large-dataset test gets past our old stub and gets to our
      ])
 ```
 
-Very satisfying, I know.
+Molto soddisfacente, lo so.
 
-I'll add another test that prints a four-node tree. Just so we test more cases than sequential ids, this test will add records in a pseudorandom order.
+Aggiungerò un altro test che stampa un albero a quattro nodi. Solo per testare più casi degli id sequenziali, questo test aggiungerà record in un ordine pseudocasuale.
 
 ```diff
 +  it 'allows printing out the structure of a 4-leaf-node btree' do
@@ -232,7 +232,7 @@ I'll add another test that prints a four-node tree. Just so we test more cases t
 +    result = run_script(script)
 ```
 
-As-is, it will output this:
+Così com'è, produrrà questo:
 
 ```
 - internal (size 3)
@@ -276,7 +276,7 @@ As-is, it will output this:
 db >
 ```
 
-Look carefully and you'll spot a bug:
+Guarda attentamente e noterai un bug:
 ```
     - 5
     - 6
@@ -284,9 +284,9 @@ Look carefully and you'll spot a bug:
   - key 1
 ```
 
-The key there should be 7, not 1!
+La chiave lì dovrebbe essere 7, non 1!
 
-After a bunch of debugging, I discovered this was due to some bad pointer arithmetic.
+Dopo un po' di debug, ho scoperto che questo era dovuto a una cattiva aritmetica dei puntatori.
 
 ```diff
  uint32_t* internal_node_key(void* node, uint32_t key_num) {
@@ -295,8 +295,8 @@ After a bunch of debugging, I discovered this was due to some bad pointer arithm
  }
 ```
 
-`INTERNAL_NODE_CHILD_SIZE` is 4. My intention here was to add 4 bytes to the result of `internal_node_cell()`, but since `internal_node_cell()` returns a `uint32_t*`, this it was actually adding `4 * sizeof(uint32_t)` bytes. I fixed it by casting to a `void*` before doing the arithmetic.
+`INTERNAL_NODE_CHILD_SIZE` è 4. La mia intenzione qui era di aggiungere 4 byte al risultato di `internal_node_cell()`, ma dato che `internal_node_cell()` restituisce un `uint32_t*`, questo stava effettivamente aggiungendo `4 * sizeof(uint32_t)` byte. L'ho risolto facendo il cast a un `void*` prima di fare l'aritmetica.
 
-NOTE! [Pointer arithmetic on void pointers is not part of the C standard and may not work with your compiler](https://stackoverflow.com/questions/3523145/pointer-arithmetic-for-void-pointer-in-c/46238658#46238658). I may do an article in the future on portability, but I'm leaving my void pointer arithmetic for now.
+NOTA! [L'aritmetica dei puntatori sui puntatori void non fa parte dello standard C e potrebbe non funzionare con il tuo compilatore](https://stackoverflow.com/questions/3523145/pointer-arithmetic-for-void-pointer-in-c/46238658#46238658). Potrei fare un articolo in futuro sulla portabilità, ma per ora lascio la mia aritmetica dei puntatori void.
 
-Alright. One more step toward a fully-operational btree implementation. The next step should be splitting internal nodes. Until then!
+Perfetto. Un altro passo verso un'implementazione btree completamente operativa. Il prossimo passo dovrebbe essere la divisione dei nodi interni. Fino ad allora!

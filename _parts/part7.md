@@ -1,88 +1,88 @@
 ---
-title: Part 7 - Introduction to the B-Tree
+title: Parte 7 - Introduzione al B-Tree
 date: 2017-09-23
 ---
 
-The B-Tree is the data structure SQLite uses to represent both tables and indexes, so it's a pretty central idea. This article will just introduce the data structure, so it won't have any code.
+Il B-Tree è la struttura dati che SQLite usa per rappresentare sia tabelle che indici, quindi è un'idea abbastanza centrale. Questo articolo introdurrà solo la struttura dati, quindi non avrà codice.
 
-Why is a tree a good data structure for a database?
+Perché un albero è una buona struttura dati per un database?
 
-- Searching for a particular value is fast (logarithmic time)
-- Inserting / deleting a value you've already found is fast (constant-ish time to rebalance)
-- Traversing a range of values is fast (unlike a hash map)
+- Cercare un valore particolare è veloce (tempo logaritmico)
+- Inserire/cancellare un valore che hai già trovato è veloce (tempo costante per ribilanciare)
+- Attraversare un intervallo di valori è veloce (a differenza di una hash map)
 
-A B-Tree is different from a binary tree (the "B" probably stands for the inventor's name, but could also stand for "balanced"). Here's an example B-Tree:
+Un B-Tree è diverso da un albero binario (la "B" probabilmente sta per il nome dell'inventore, ma potrebbe anche stare per "balanced"). Ecco un esempio di B-Tree:
 
-{% include image.html url="assets/images/B-tree.png" description="example B-Tree (https://en.wikipedia.org/wiki/File:B-tree.svg)" %}
+{% include image.html url="assets/images/B-tree.png" description="esempio B-Tree (https://en.wikipedia.org/wiki/File:B-tree.svg)" %}
 
-Unlike a binary tree, each node in a B-Tree can have more than 2 children. Each node can have up to m children, where m is called the tree's "order". To keep the tree mostly balanced, we also say nodes have to have at least m/2 children (rounded up).
+A differenza di un albero binario, ogni nodo in un B-Tree può avere più di 2 figli. Ogni nodo può avere fino a m figli, dove m è chiamato "ordine" dell'albero. Per mantenere l'albero per lo più bilanciato, diciamo anche che i nodi devono avere almeno m/2 figli (arrotondato per eccesso).
 
-Exceptions:
-- Leaf nodes have 0 children
-- The root node can have fewer than m children but must have at least 2
-- If the root node is a leaf node (the only node), it still has 0 children
+Eccezioni:
+- I nodi foglia hanno 0 figli
+- Il nodo radice può avere meno di m figli ma deve averne almeno 2
+- Se il nodo radice è un nodo foglia (l'unico nodo), ha ancora 0 figli
 
-The picture from above is a B-Tree, which SQLite uses to store indexes. To store tables, SQLites uses a variation called a B+ tree.
+L'immagine sopra è un B-Tree, che SQLite usa per memorizzare indici. Per memorizzare tabelle, SQLite usa una variazione chiamata B+ tree.
 
 |                               | B-tree         | B+ tree             |
 |-------------------------------|----------------|---------------------|
-| Pronounced                    | "Bee Tree"     | "Bee Plus Tree"     |
-| Used to store                 | Indexes        | Tables              |
-| Internal nodes store keys     | Yes            | Yes                 |
-| Internal nodes store values   | Yes            | No                  |
-| Number of children per node   | Less           | More                |
-| Internal nodes vs. leaf nodes | Same structure | Different structure |
+| Pronunciato                   | "Bee Tree"     | "Bee Plus Tree"     |
+| Usato per memorizzare         | Indici         | Tabelle             |
+| I nodi interni memorizzano chiavi | Sì            | Sì                 |
+| I nodi interni memorizzano valori | Sì            | No                 |
+| Numero di figli per nodo      | Meno           | Più                 |
+| Nodi interni vs nodi foglia   | Stessa struttura | Struttura diversa |
 
-Until we get to implementing indexes, I'm going to talk solely about B+ trees, but I'll just refer to it as a B-tree or a btree.
+Finché non arriviamo a implementare gli indici, parlerò solo di B+ tree, ma mi riferirò ad esso semplicemente come B-tree o btree.
 
-Nodes with children are called "internal" nodes. Internal nodes and leaf nodes are structured differently:
+I nodi con figli sono chiamati nodi "interni". I nodi interni e i nodi foglia sono strutturati diversamente:
 
-| For an order-m tree... | Internal Node                 | Leaf Node           |
-|------------------------|-------------------------------|---------------------|
-| Stores                 | keys and pointers to children | keys and values     |
-| Number of keys         | up to m-1                     | as many as will fit |
-| Number of pointers     | number of keys + 1            | none                |
-| Number of values       | none                          | number of keys      |
-| Key purpose            | used for routing              | paired with value   |
-| Stores values?         | No                            | Yes                 |
+| Per un albero di ordine m... | Nodo Interno                 | Nodo Foglia         |
+|------------------------------|------------------------------|---------------------|
+| Memorizza                    | chiavi e puntatori ai figli | chiavi e valori     |
+| Numero di chiavi             | fino a m-1                   | quante ne entrano   |
+| Numero di puntatori          | numero di chiavi + 1         | nessuno             |
+| Numero di valori             | nessuno                      | numero di chiavi    |
+| Scopo delle chiavi           | usate per il routing         | accoppiate con valore |
+| Memorizza valori?            | No                           | Sì                 |
 
-Let's work through an example to see how a B-tree grows as you insert elements into it. To keep things simple, the tree will be order 3. That means:
+Lavoriamo attraverso un esempio per vedere come un B-tree cresce mentre inserisci elementi in esso. Per mantenere le cose semplici, l'albero sarà di ordine 3. Questo significa:
 
-- up to 3 children per internal node
-- up to 2 keys per internal node
-- at least 2 children per internal node
-- at least 1 key per internal node
+- fino a 3 figli per nodo interno
+- fino a 2 chiavi per nodo interno
+- almeno 2 figli per nodo interno
+- almeno 1 chiave per nodo interno
 
-An empty B-tree has a single node: the root node. The root node starts as a leaf node with zero key/value pairs:
+Un B-tree vuoto ha un singolo nodo: il nodo radice. Il nodo radice inizia come nodo foglia con zero coppie chiave/valore:
 
-{% include image.html url="assets/images/btree1.png" description="empty btree" %}
+{% include image.html url="assets/images/btree1.png" description="btree vuoto" %}
 
-If we insert a couple key/value pairs, they are stored in the leaf node in sorted order.
+Se inseriamo un paio di coppie chiave/valore, sono memorizzate nel nodo foglia in ordine ordinato.
 
-{% include image.html url="assets/images/btree2.png" description="one-node btree" %}
+{% include image.html url="assets/images/btree2.png" description="btree a un nodo" %}
 
-Let's say that the capacity of a leaf node is two key/value pairs. When we insert another, we have to split the leaf node and put half the pairs in each node. Both nodes become children of a new internal node which will now be the root node.
+Diciamo che la capacità di un nodo foglia è di due coppie chiave/valore. Quando ne inseriamo un'altra, dobbiamo dividere il nodo foglia e mettere metà delle coppie in ogni nodo. Entrambi i nodi diventano figli di un nuovo nodo interno che ora sarà il nodo radice.
 
-{% include image.html url="assets/images/btree3.png" description="two-level btree" %}
+{% include image.html url="assets/images/btree3.png" description="btree a due livelli" %}
 
-The internal node has 1 key and 2 pointers to child nodes. If we want to look up a key that is less than or equal to 5, we look in the left child. If we want to look up a key greater than 5, we look in the right child.
+Il nodo interno ha 1 chiave e 2 puntatori ai nodi figli. Se vogliamo cercare una chiave che è minore o uguale a 5, guardiamo nel figlio sinistro. Se vogliamo cercare una chiave maggiore di 5, guardiamo nel figlio destro.
 
-Now let's insert the key "2". First we look up which leaf node it would be in if it was present, and we arrive at the left leaf node. The node is full, so we split the leaf node and create a new entry in the parent node.
+Ora inseriamo la chiave "2". Prima cerchiamo in quale nodo foglia sarebbe se fosse presente, e arriviamo al nodo foglia sinistro. Il nodo è pieno, quindi dividiamo il nodo foglia e creiamo una nuova entry nel nodo genitore.
 
-{% include image.html url="assets/images/btree4.png" description="four-node btree" %}
+{% include image.html url="assets/images/btree4.png" description="btree a quattro nodi" %}
 
-Let's keep adding keys. 18 and 21. We get to the point where we have to split again, but there's no room in the parent node for another key/pointer pair.
+Continuiamo ad aggiungere chiavi. 18 e 21. Arriviamo al punto dove dobbiamo dividere di nuovo, ma non c'è spazio nel nodo genitore per un'altra coppia chiave/puntatore.
 
-{% include image.html url="assets/images/btree5.png" description="no room in internal node" %}
+{% include image.html url="assets/images/btree5.png" description="nessuno spazio nel nodo interno" %}
 
-The solution is to split the root node into two internal nodes, then create new root node to be their parent.
+La soluzione è dividere il nodo radice in due nodi interni, poi creare un nuovo nodo radice per essere il loro genitore.
 
-{% include image.html url="assets/images/btree6.png" description="three-level btree" %}
+{% include image.html url="assets/images/btree6.png" description="btree a tre livelli" %}
 
-The depth of the tree only increases when we split the root node. Every leaf node has the same depth and close to the same number of key/value pairs, so the tree remains balanced and quick to search.
+La profondità dell'albero aumenta solo quando dividiamo il nodo radice. Ogni nodo foglia ha la stessa profondità e un numero simile di coppie chiave/valore, quindi l'albero rimane bilanciato e veloce da cercare.
 
-I'm going to hold off on discussion of deleting keys from the tree until after we've implemented insertion.
+Rimanderò la discussione sulla cancellazione di chiavi dall'albero finché non avremo implementato l'inserimento.
 
-When we implement this data structure, each node will correspond to one page. The root node will exist in page 0. Child pointers will simply be the page number that contains the child node.
+Quando implementeremo questa struttura dati, ogni nodo corrisponderà a una pagina. Il nodo radice esisterà nella pagina 0. I puntatori ai figli saranno semplicemente il numero di pagina che contiene il nodo figlio.
 
-Next time, we start implementing the btree!
+La prossima volta, iniziamo a implementare il btree!
