@@ -1,6 +1,6 @@
 # Let's Build a Simple Database
 
-[View rendered tutorial](https://cstack.github.io/db_tutorial/) (with more details on what this is.)
+[View rendered tutorial](https://andreax22.github.io/creazione_db_engine/) (with more details on what this is)
 
 ## Notes to myself
 
